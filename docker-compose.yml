@@ -1,0 +1,94 @@
+# =============================================================================
+# Votech Edge Agent
+#
+# Install (step by step for Windows and Linux: README.md, shipped with this file)
+#   1. Put this file in an empty folder: C:\VotechAgent on Windows, /opt/edge-agent on Linux
+#   2. Copy env.example to .env in the same folder and fill in your site values
+#   3. docker compose up -d
+#   4. docker compose logs -f        (Ctrl+C to stop following)
+#
+# Upgrade
+#   Change the version at the end of the "image:" line below, then run:
+#     docker compose up -d
+#   Buffered telemetry and cached device configuration live in the "edge-data"
+#   volume and are kept; database migrations run automatically on startup.
+#
+# After editing .env, run "docker compose up -d" (a plain restart does not
+# pick up .env changes). Never run "docker compose down -v": -v deletes the
+# local telemetry buffer.
+#
+# Full guide: README.md (shipped with this file)
+# Downloads:  https://github.com/europower-enerji/edge-agent-release (public, no account needed)
+# =============================================================================
+
+# Fixed project name: keeps the same volumes even if this folder is renamed
+name: edge-agent
+
+services:
+  edge-agent:
+    image: ghcr.io/europower-enerji/edge-agent:4.2.3
+    container_name: edge-agent
+    restart: unless-stopped
+
+    environment:
+      # ── Agent identity & authentication (required) ──────────────────────────
+      # The sites this agent serves are assigned on the Votech Site connectors page; the agent asks for them.
+      EdgeAgent__AgentKey: ${AGENT_KEY:?AGENT_KEY is not set. Add it to the .env file next to docker-compose.yml}
+      # Optional guard: refuse a key of another organisation (empty for a platform agent)
+      EdgeAgent__TenantId: ${TENANT_ID:-}
+
+      # ── Votech backend & MQTT broker (required) ───────────────────────────
+      EdgeAgent__ApiBaseUrl: ${API_BASE_URL:?API_BASE_URL is not set. Add it to the .env file next to docker-compose.yml}
+      EdgeAgent__Mqtt__BrokerHost: ${MQTT_HOST:?MQTT_HOST is not set. Add it to the .env file next to docker-compose.yml}
+      EdgeAgent__Mqtt__BrokerPort: ${MQTT_PORT:-8883}
+      EdgeAgent__Mqtt__UseTls: ${MQTT_USE_TLS:-true}
+
+      # ── Optional ────────────────────────────────────────────────────────────
+      # Each site connects as edge-<key id>-<site id>, the only client ids Votech accepts for AGENT_KEY
+      # Empty username = authenticate as <key id of AGENT_KEY> / <AGENT_KEY>
+      EdgeAgent__Mqtt__Username: ${MQTT_USERNAME:-}
+      EdgeAgent__Mqtt__Password: ${MQTT_PASSWORD:-}
+      # Only when Votech runs with its own (private) CA: the broker's and the API's certificates must chain to it
+      # and name their host. A file the agent cannot read stops it (see the certs volume below)
+      EdgeAgent__Mqtt__CaCertificatePath: ${MQTT_CA_CERT:-}
+      EdgeAgent__ApiCaCertificatePath: ${API_CA_CERT:-}
+      # Encrypts the local SQLite buffer. Set it before the FIRST start and never change it
+      EdgeAgent__Storage__DbPassword: ${DB_PASSWORD:-}
+      Serilog__MinimumLevel__Default: ${LOG_LEVEL:-Information}
+
+      # ── Fixed (do not change) ───────────────────────────────────────────────
+      # Keep reconnecting to the broker through internet outages of any length
+      EdgeAgent__Mqtt__MaxReconnectAttempts: "2147483647"
+
+    volumes:
+      # Local telemetry buffer + cached device configuration (survives upgrades)
+      - edge-data:/var/lib/edge-agent
+      # Rolling daily log files (7 days)
+      - edge-logs:/var/log/edge-agent
+      # Private CA: put ca.pem in ./certs, uncomment, and set MQTT_CA_CERT (and API_CA_CERT) to /etc/edge-agent/certs/ca.pem
+      # - ./certs:/etc/edge-agent/certs:ro
+
+    # Modbus RTU over a serial adapter: uncomment and adjust the device path
+    # devices:
+    #   - /dev/ttyUSB0:/dev/ttyUSB0
+    # group_add:
+    #   - dialout
+
+    # Field devices are reached through the host's network (outbound only, no ports
+    # are published). If your device LAN overlaps Docker's 172.16.0.0/12 range,
+    # uncomment to use the host network stack directly (Linux hosts only):
+    # network_mode: host
+
+    # Give the agent time to flush the SQLite WAL and close MQTT sessions cleanly
+    stop_grace_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+volumes:
+  edge-data:
+  edge-logs:
