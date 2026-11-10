@@ -26,7 +26,7 @@ name: edge-agent
 
 services:
   edge-agent:
-    image: ghcr.io/europower-enerji/edge-agent:4.4.3
+    image: ghcr.io/europower-enerji/edge-agent:4.4.4
     container_name: edge-agent
     restart: unless-stopped
 
