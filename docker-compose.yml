@@ -26,7 +26,7 @@ name: edge-agent
 
 services:
   edge-agent:
-    image: ghcr.io/europower-enerji/edge-agent:4.2.3
+    image: ghcr.io/europower-enerji/edge-agent:4.4.3
     container_name: edge-agent
     restart: unless-stopped
 
@@ -42,6 +42,8 @@ services:
       EdgeAgent__Mqtt__BrokerHost: ${MQTT_HOST:?MQTT_HOST is not set. Add it to the .env file next to docker-compose.yml}
       EdgeAgent__Mqtt__BrokerPort: ${MQTT_PORT:-8883}
       EdgeAgent__Mqtt__UseTls: ${MQTT_USE_TLS:-true}
+      # Only when Votech gives you a web path (MQTT over HTTPS on port 443, e.g. /mqtt); empty: MQTT on MQTT_PORT
+      EdgeAgent__Mqtt__WebSocketPath: ${MQTT_WEBSOCKET_PATH:-}
 
       # ── Optional ────────────────────────────────────────────────────────────
       # Each site connects as edge-<key id>-<site id>, the only client ids Votech accepts for AGENT_KEY

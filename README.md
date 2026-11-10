@@ -16,7 +16,11 @@ account:** the agent and these files are public and free to download from
 | `README.md`          | This guide.                                                                                 |
 | `source/`            | The complete source code of each version (the agent is free software, GPL-3.0-only). Not needed to install. |
 
-Every step has a **Windows** and a **Linux** part. Follow the one for your computer.
+**Which installation?**
+
+- **Linux**, or **Windows 10/11 with Docker Desktop**: steps 1 to 7 below. Every step has a Windows and a Linux part.
+- **Windows Server**, or any Windows computer where Docker or WSL can't be installed: the agent runs as a Windows
+  service, set up from an administrator PowerShell. See [Windows Server (no Docker)](#windows-server-no-docker).
 
 ---
 
@@ -26,7 +30,7 @@ Every step has a **Windows** and a **Linux** part. Follow the one for your compu
 
 | Item   | Windows                                                                                             | Linux                                                                                         |
 | ------ | --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| System | Windows 10 or 11, 64-bit. **Not Windows Server**: Docker Desktop doesn't run there, use Linux (a virtual machine is fine). | x86-64 (industrial PC, server, virtual machine) or 64-bit ARM (Raspberry Pi 4/5 with a **64-bit** OS) |
+| System | Windows 10 or 11, 64-bit. **Not Windows Server**: Docker Desktop doesn't run there; use [Windows Server (no Docker)](#windows-server-no-docker). | x86-64 (industrial PC, server, virtual machine) or 64-bit ARM (Raspberry Pi 4/5 with a **64-bit** OS) |
 | Memory | 4 GB RAM or more                                                                                    | 1 GB RAM or more                                                                              |
 | Disk   | 10 GB free or more                                                                                  | 6 GB free or more (the data buffer can grow to 2 GB, see [Data buffer](#data-buffer))         |
 | Clock  | Set automatically (Settings → Time & language → Date & time → **Set time automatically**)          | Synchronized with NTP                                                                         |
@@ -48,12 +52,12 @@ The clock must be right: every reading carries its time.
 | `ghcr.io`, `pkg-containers.githubusercontent.com`                   | 443                                                | Download the agent software                                                 |
 | `github.com`, `codeload.github.com`, `raw.githubusercontent.com`    | 443                                                | Download the installation files (only on the computer you download them on) |
 | Your `API_BASE_URL` host                                            | 443                                                | Site configuration                                                          |
-| Your `MQTT_HOST`                                                    | 8883 (or your `MQTT_PORT`)                         | Sending the readings                                                        |
+| Your `MQTT_HOST`                                                    | 8883, or 443 when Votech gives you a web path (`MQTT_WEBSOCKET_PATH`) | Sending the readings                                         |
 | Your field devices (local network)                                  | 2404 (IEC 104), 502 (Modbus TCP), or as configured | Reading device data                                                         |
 
 If your company firewall limits outgoing connections, ask your IT team to allow these. If your RTUs or PLCs only accept connections from known IP addresses, allow the **agent computer's IP address**.
 
-**Values from Votech.** Have these ready: `AGENT_KEY` (shown once when the agent is registered on the Votech **Site connectors** page, where its sites are chosen), `API_BASE_URL`, `MQTT_HOST` (and `MQTT_PORT` if it isn't 8883). One agent can serve one site or several; you never list the sites here.
+**Values from Votech.** Have these ready: `AGENT_KEY` (shown once when the agent is registered on the Votech **Site connectors** page, where its sites are chosen), `API_BASE_URL`, `MQTT_HOST` (and `MQTT_PORT` if it isn't 8883), and `MQTT_WEBSOCKET_PATH` if Votech's broker is reached over HTTPS. One agent can serve one site or several; you never list the sites here.
 
 ---
 
@@ -181,6 +185,7 @@ Use exactly the values Votech gave you. Never use `localhost` or `127.0.0.1`: in
 | Variable                         | When to use it                                                                                                                                                       |
 | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `TENANT_ID`                      | Your organisation id. The agent then refuses a key of another organisation. Leave it out for a Votech platform agent.                                              |
+| `MQTT_WEBSOCKET_PATH`            | Only if Votech gave you a web path for the broker, e.g. `/mqtt`. The agent then sends over HTTPS; set `MQTT_PORT=443` with it.                                     |
 | `MQTT_USERNAME`, `MQTT_PASSWORD` | Only if Votech gave you separate MQTT credentials. Default: the key id of AGENT_KEY and AGENT_KEY                                                                  |
 | `MQTT_CA_CERT`, `API_CA_CERT`    | Only if Votech gave you a CA certificate file (see [Private CA certificate](#private-ca-certificate))                                                              |
 | `DB_PASSWORD`                    | Encrypts the local data buffer on disk. Decide **before the first start** and never change it afterwards; the agent can't open its buffer with a different password. |
@@ -196,6 +201,18 @@ API_BASE_URL=https://api.example.com
 MQTT_HOST=mqtt.example.com
 MQTT_PORT=8883
 MQTT_USE_TLS=true
+```
+
+When Votech's broker is reached over HTTPS (Votech gives you a web path such as `/mqtt`), the agent needs no port
+other than 443:
+
+```dotenv
+AGENT_KEY=eak_live_8f3k2l9m4n5p6q7r_4d1c0b2a9f8e7d6c5b4a39281706f5e4d3c2b1a0f9e8d7c6b5a4938271605f4e
+API_BASE_URL=https://votech.example.com
+MQTT_HOST=votech.example.com
+MQTT_PORT=443
+MQTT_USE_TLS=true
+MQTT_WEBSOCKET_PATH=/mqtt
 ```
 
 ### Format rules
@@ -271,7 +288,11 @@ Within about a minute you should see these lines:
 
 Press **Ctrl+C** to stop watching. The agent keeps running.
 
-**No `[MQTT] Connected successfully`?** Test whether this computer can reach the Votech broker. Put your `MQTT_HOST` in place of `mqtt.example.com`:
+The first `[MQTT]` line names the broker address the agent uses: `mqtt.example.com:8883`, or
+`wss://votech.example.com:443/mqtt` with `MQTT_WEBSOCKET_PATH`. Check that it is the one Votech gave you.
+
+**No `[MQTT] Connected successfully`?** Test whether this computer can reach the Votech broker. Put your `MQTT_HOST`
+in place of `mqtt.example.com`, and `443` in place of `8883` if you use `MQTT_WEBSOCKET_PATH`:
 
 Windows (look for `TcpTestSucceeded : True`):
 
@@ -285,7 +306,8 @@ Linux (look for `succeeded` or `open`):
 nc -zv mqtt.example.com 8883
 ```
 
-If the test fails, a firewall blocks outgoing port 8883: ask your IT team to allow it to your `MQTT_HOST`. The agent keeps the readings meanwhile and sends them once the connection works.
+If the test fails, a firewall blocks that outgoing port: ask your IT team to allow it to your `MQTT_HOST`. The agent
+keeps the readings meanwhile and sends them once the connection works.
 
 ---
 
@@ -331,6 +353,120 @@ contact Votech before rolling back: the previous version needs the
 
 ---
 
+## Windows Server (no Docker)
+
+For Windows Server, or any Windows computer where Docker or WSL can't be installed. The agent runs as a Windows
+service: no Docker, no WSL, nothing else to install. It starts after every boot without anyone signing in, and COM
+ports (Modbus RTU) work.
+
+**You need:** Windows Server 2016 or later, or Windows 10/11, 64-bit; 2 GB RAM; 6 GB free disk; an administrator
+account; the network access of [step 1](#1-before-you-start) (`ghcr.io` is not needed); the values from Votech
+(step 1).
+
+### W1. Open PowerShell as administrator
+
+Start menu → type **PowerShell** → right-click **Windows PowerShell** → **Run as administrator** (or right-click the
+Start button → **Terminal (Admin)**). Run every command below in this window, one after the other.
+
+### W2. Download and unpack the latest package
+
+The official package is always at the same address (every version is also listed on
+<https://github.com/europower-enerji/edge-agent-release/releases>). No account is needed.
+
+Allow the secure connection GitHub needs (older Windows Server versions don't use it by default):
+
+```powershell
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+```
+
+Start with an empty setup folder (it holds only the download, never your settings or data):
+
+```powershell
+Remove-Item C:\VotechSetup -Recurse -Force -ErrorAction SilentlyContinue; New-Item -ItemType Directory C:\VotechSetup | Out-Null
+```
+
+Download the latest package (about 40 MB):
+
+```powershell
+Invoke-WebRequest -UseBasicParsing https://github.com/europower-enerji/edge-agent-release/releases/latest/download/votech-edge-agent-windows-x64.zip -OutFile C:\VotechSetup\votech-edge-agent-windows-x64.zip
+```
+
+Unpack it and go to its folder:
+
+```powershell
+Expand-Archive C:\VotechSetup\votech-edge-agent-windows-x64.zip -DestinationPath C:\VotechSetup
+```
+
+```powershell
+Set-Location (Get-ChildItem C:\VotechSetup -Directory).FullName
+```
+
+**Without internet on the server:** download `votech-edge-agent-windows-x64.zip` on another computer from the address
+above, copy it to `C:\VotechSetup` on the server, right-click it → **Properties** → tick **Unblock** (if shown) →
+**OK**, then run the last two commands.
+
+### W3. Install
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+1. Notepad opens your settings file, `C:\ProgramData\EdgeAgent\.env`. Enter the values from Votech exactly as in
+   [step 4](#4-fill-in-your-settings-env), with the same names, then press **Ctrl+S** and close Notepad.
+2. The script checks every value and prints `PASS` or `FAIL` for each. On a `FAIL` it opens Notepad again.
+3. It installs the agent as the Windows service **Votech Edge Agent**, starts it, and shows the last log lines.
+
+**Expected:** `RESULT: PASS`, and `[MQTT] Connected successfully` in the log lines (the other lines are in
+[step 6](#6-check-that-it-works)). Only administrators can open the settings file; the agent key is not shown again.
+
+**Where everything is**
+
+| What                                            | Folder                                |
+| ----------------------------------------------- | ------------------------------------- |
+| Program                                         | `C:\Program Files\EdgeAgent`          |
+| Settings (`.env`, administrators only)          | `C:\ProgramData\EdgeAgent\.env`       |
+| Data buffer                                     | `C:\ProgramData\EdgeAgent\data`       |
+| Logs (one file per day, 7 days)                 | `C:\ProgramData\EdgeAgent\logs`       |
+
+### W4. Everyday commands (PowerShell as administrator)
+
+| Task                                         | Command                                                                                                  |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Status, settings check and last log lines    | `powershell -ExecutionPolicy Bypass -File "C:\Program Files\EdgeAgent\install.ps1" -Action Status`      |
+| Change settings (Notepad, check, restart)    | `powershell -ExecutionPolicy Bypass -File "C:\Program Files\EdgeAgent\install.ps1" -Action Config`      |
+| Restart                                      | `Restart-Service VotechEdgeAgent`                                                                        |
+| Stop / start                                 | `Stop-Service VotechEdgeAgent` / `Start-Service VotechEdgeAgent`                                         |
+| Live log (Ctrl+C stops watching)             | `Get-Content (Get-ChildItem C:\ProgramData\EdgeAgent\logs\agent-*.log \| Sort-Object LastWriteTime \| Select-Object -Last 1).FullName -Tail 20 -Wait` |
+
+### W5. Upgrade
+
+Run W1, W2 and W3 again: W2 downloads the newest package. Your settings and the
+buffered data are kept; the agent restarts with the new version.
+
+### W6. Uninstall
+
+```powershell
+powershell -ExecutionPolicy Bypass -File "C:\Program Files\EdgeAgent\install.ps1" -Action Uninstall
+```
+
+This removes the service and the program and keeps the settings, the buffered data and the logs. Add `-RemoveData` to
+delete those too, only after Votech confirms that all data has arrived.
+
+### Notes for Windows Server
+
+- **Connection test:** `Test-NetConnection <MQTT_HOST> -Port 443` (or `8883`), as in [step 6](#6-check-that-it-works).
+- **Private CA:** copy `ca.pem` to `C:\ProgramData\EdgeAgent\data\ca.pem`, then use `-Action Config` to set
+  `MQTT_CA_CERT=C:\ProgramData\EdgeAgent\data\ca.pem` (and `API_CA_CERT` when Votech says so). The service can read
+  files in that folder only.
+- **Modbus RTU:** the COM port (for example `COM3`) is part of the site configuration at Votech; nothing to change on
+  the computer.
+- **`running scripts is disabled on this system`:** start the script with `powershell -ExecutionPolicy Bypass -File …`
+  exactly as shown; that changes the setting for this one command only.
+- **The service stops right after starting:** `-Action Status` shows the log lines. They are the same as with Docker,
+  so the [Troubleshooting](#troubleshooting) table explains them.
+
+---
+
 ## Everyday commands
 
 Run these in the agent folder: on Windows in PowerShell in `C:\VotechAgent`, on Linux in `/opt/edge-agent` with `sudo` in front.
@@ -365,7 +501,9 @@ To test a connection named below: on Windows `Test-NetConnection <host or IP> -P
 | `MQTT_CA_CERT` or `API_CA_CERT` ... `does not exist` or `holds no certificate`, and the agent stops | The CA file is not where the setting points, or is not a certificate | Check the `./certs` volume line and the path in `.env`, then `docker compose up -d`. Clear the setting if Votech did not give you a CA file. |
 | `[MqttTls] Refused the certificate of broker ...` or `[API-TLS] Refused the certificate of ...` | The server's certificate was not issued by your CA file, or does not name the address you connect to | Check that `MQTT_HOST` / `API_BASE_URL` use the name on the certificate, and that `ca.pem` is the one Votech gave you. Ask Votech if both look right. |
 | `[MQTT-AUTH] MQTT broker rejected credentials`                                                                     | Wrong `AGENT_KEY`, or wrong `MQTT_USERNAME`/`MQTT_PASSWORD`                                                                                                                                         | Check those values.                                                                                                                                                                                                                                                                                                  |
-| `[MQTT] Reconnect attempt #...` repeating                                                                          | The broker can't be reached                                                                                                                                                                         | Test the connection to your `MQTT_HOST` on port 8883 (see [step 6](#6-check-that-it-works)). Check that `MQTT_HOST` has no `https://` or `:port`. Data is buffered and sent once the connection returns.                                                                                                          |
+| `[MQTT] Reconnect attempt #...` repeating                                                                          | The broker can't be reached                                                                                                                                                                         | Test the connection to your `MQTT_HOST` on your `MQTT_PORT` (see [step 6](#6-check-that-it-works)). Check that `MQTT_HOST` has no `https://` or `:port`. Data is buffered and sent once the connection returns.                                                                                                   |
+| `The server returned status code '404' when status code '101' was expected` (or another code than 404)            | The agent reached the server over HTTPS, but the web path is not the broker's                                                                                                                       | Check `MQTT_WEBSOCKET_PATH` (exactly what Votech gave you, e.g. `/mqtt`), `MQTT_HOST` and `MQTT_PORT=443`, then `docker compose up -d`. Ask Votech if all three look right.                                                                                                                                       |
+| `EdgeAgent:Mqtt:WebSocketPath (MQTT_WEBSOCKET_PATH) must be a path such as /mqtt`                                  | A whole address was put in `MQTT_WEBSOCKET_PATH`                                                                                                                                                    | Put only the path there (`/mqtt`), the host name in `MQTT_HOST` and the port in `MQTT_PORT`, then `docker compose up -d`.                                                                                                                                                                                          |
 | `[SYNC-CONFIG] The backend at ... cannot be reached. Running on the cached configuration.`                         | The backend can't be reached                                                                                                                                                                        | Check internet, DNS and firewall: test the connection to the host of `API_BASE_URL` on port 443. The agent keeps collecting with its last known configuration.                                                                                                                                                       |
 | `[SYNC-CONFIG] No cached configuration for site ...`                                                               | First start, and the backend can't be reached                                                                                                                                                       | Nothing is read until the backend answers. Fix the connection to `API_BASE_URL`.                                                                                                                                                                                                                                     |
 | `EdgeAgent:ApiBaseUrl must be an https address` or `EdgeAgent:Mqtt:UseTls must be true`                            | The agent refuses an unencrypted connection                                                                                                                                                         | Set `API_BASE_URL` to `https://...` and `MQTT_USE_TLS=true`, then `docker compose up -d`.                                                                                                                                                                                                                            |

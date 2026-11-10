@@ -1,0 +1,57 @@
+# The release workflow of the public repository europower-enerji/edge-agent-release. deploy/publish-customer-bundle.sh
+# (votech-agent) copies this file to .github/workflows/release.yml there, with every version.
+#
+# For each version tag it builds the Windows package from the source package in source/ (GPL-3.0-only: the program
+# customers run comes from the source anyone can read) and publishes a GitHub Release with every customer file. Customers
+# download without any account, and the Windows package always has the same address:
+#   https://github.com/europower-enerji/edge-agent-release/releases/latest/download/votech-edge-agent-windows-x64.zip
+# It needs no secret: the repository's own token creates the release.
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build the Windows package from the source package
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p build dist
+          tar -xzf "source/edge-agent-${version}-source.tar.gz" -C build
+          bash build/votech-agent/deploy/windows/build-package.sh "$PWD/dist"
+          # The same package under a name without the version, for the address that always gives the latest one
+          cp "dist/votech-edge-agent-${version}-windows-x64.zip" dist/votech-edge-agent-windows-x64.zip
+          (cd dist && sha256sum votech-edge-agent-windows-x64.zip > votech-edge-agent-windows-x64.zip.sha256)
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          {
+            echo "Votech Edge Agent ${version}"
+            echo
+            echo "- **Windows Server, or Windows without Docker:** \`votech-edge-agent-windows-x64.zip\` (the same as \`votech-edge-agent-${version}-windows-x64.zip\`). Unpack it and run \`install.ps1\` in PowerShell as administrator: README.md, \"Windows Server (no Docker)\"."
+            echo "- **Linux, or Windows 10/11 with Docker Desktop:** \`docker-compose.yml\` (image \`ghcr.io/europower-enerji/edge-agent:${version}\`) and \`env.example\`: README.md, steps 1 to 7."
+            echo "- **Upgrade:** keep your \`.env\`. Windows: run \`install.ps1\` of the new package. Docker: the new \`docker-compose.yml\`, then \`docker compose up -d\`."
+            echo "- **Source:** the agent is free software (GPL-3.0-only). \`edge-agent-${version}-source.tar.gz\` holds the complete source; the Windows package of this release was built from it."
+          } > notes.md
+          args=(--title "Votech Edge Agent ${version}" --notes-file notes.md --verify-tag)
+          if [[ "$version" == *-* ]]; then args+=(--prerelease); else args+=(--latest); fi
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" "${args[@]}"
+          gh release upload "$GITHUB_REF_NAME" --clobber \
+            dist/votech-edge-agent-windows-x64.zip dist/votech-edge-agent-windows-x64.zip.sha256 \
+            "dist/votech-edge-agent-${version}-windows-x64.zip" "dist/votech-edge-agent-${version}-windows-x64.zip.sha256" \
+            docker-compose.yml env.example README.md "source/edge-agent-${version}-source.tar.gz"
