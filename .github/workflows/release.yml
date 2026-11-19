@@ -43,7 +43,7 @@ jobs:
           {
             echo "Votech Edge Agent ${version}"
             echo
-            echo "- **Windows Server, or Windows without Docker:** \`votech-edge-agent-windows-x64.zip\` (the same as \`votech-edge-agent-${version}-windows-x64.zip\`). Unpack it and run \`install.ps1\` in PowerShell as administrator: README.md, \"Windows Server (no Docker)\"."
+            echo "- **Windows Server, or Windows without Docker:** \`votech-edge-agent-windows-x64.zip\` (the same as \`votech-edge-agent-${version}-windows-x64.zip\`). Unpack it and run \`install.ps1\` in PowerShell as administrator: README.md, \"On Windows: install the agent as a Windows service\"."
             echo "- **Linux, or Windows 10/11 with Docker Desktop:** \`docker-compose.yml\` (image \`ghcr.io/europower-enerji/edge-agent:${version}\`) and \`env.example\`: README.md, steps 1 to 7."
             echo "- **Upgrade:** keep your \`.env\`. Windows: run \`install.ps1\` of the new package. Docker: the new \`docker-compose.yml\`, then \`docker compose up -d\`."
             echo "- **Source:** the agent is free software (GPL-3.0-only). \`edge-agent-${version}-source.tar.gz\` holds the complete source; the Windows package of this release was built from it."
